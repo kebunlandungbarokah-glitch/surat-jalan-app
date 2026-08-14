@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 // Inisialisasi Client Supabase
@@ -7,14 +7,60 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+// Preset Gedung Khusus Universitas Terbuka
+const GEDUNG_UT = [
+  'Perbankan',
+  'Poliklinik',
+  'LPPMP Lobby',
+  'PAU',
+  'Serbaguna',
+  'Kualitas',
+  'Pascasarjana',
+  'Wisma 2 & 3',
+  'Rektorat',
+  'LPPMP',
+  'Biro'
+];
+
+// Preset No. Polisi Armada
+const PRESET_NOPOL = ['F 8575 HY', 'B 9123 SJA', 'B 9456 KLB'];
+
+// Helper Angka Romawi untuk Bulan
+const toRomanMonth = (monthIndex) => {
+  const romans = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+  return romans[monthIndex];
+};
+
+// Helper Format Tanggal Indonesia
+const getFormattedToday = () => {
+  const today = new Date();
+  return today.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
+};
+
+// Helper Generator No Surat Otomatis
+const generateAutoNoSurat = () => {
+  const today = new Date();
+  const romanMonth = toRomanMonth(today.getMonth());
+  const year = today.getFullYear();
+  const randomNum = String(Math.floor(Math.random() * 900) + 100);
+  return `${randomNum}/SJ/KLB/${romanMonth}/${year}`;
+};
+
 export default function SuratJalanApp() {
+  const [selectedPenerima, setSelectedPenerima] = useState('PT. Beiersdorf Indonesia');
+  const [selectedGedungUT, setSelectedGedungUT] = useState(GEDUNG_UT[0]);
+
   const [formData, setFormData] = useState({
     kepada: 'PT. Beiersdorf Indonesia',
     alamat: 'South Quarter (SQ) Tower C, Lantai 6, Jl. R.A. Kartini, Kav. 8, Cilandak Barat, Jakarta Selatan',
     gedung: 'Tower C, Lt. 6',
-    tanggal: '15 Agustus 2026',
-    noSurat: '041/SJ/KLB/VIII/2026',
-    noPolisi: 'F 8575 HY',
+    tanggal: '',
+    noSurat: '',
+    noPolisi: PRESET_NOPOL[0],
   });
 
   const [items, setItems] = useState([
@@ -26,6 +72,55 @@ export default function SuratJalanApp() {
 
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
+
+  // Auto Generate Tanggal & No Surat saat awal dibuka
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      tanggal: getFormattedToday(),
+      noSurat: generateAutoNoSurat(),
+    }));
+  }, []);
+
+  // Handle Perubahan Penerima Utama
+  const handlePenerimaChange = (e) => {
+    const val = e.target.value;
+    setSelectedPenerima(val);
+
+    if (val === 'PT. Beiersdorf Indonesia') {
+      setFormData((prev) => ({
+        ...prev,
+        kepada: 'PT. Beiersdorf Indonesia',
+        gedung: 'Tower C, Lt. 6',
+        alamat: 'South Quarter (SQ) Tower C, Lantai 6, Jl. R.A. Kartini, Kav. 8, Cilandak Barat, Jakarta Selatan'
+      }));
+    } else if (val === 'Universitas Terbuka') {
+      setFormData((prev) => ({
+        ...prev,
+        kepada: 'Universitas Terbuka',
+        gedung: `Gedung ${selectedGedungUT}`,
+        alamat: 'Jl. Cabe Raya, Pondok Cabe, Pamulang, Tangerang Selatan'
+      }));
+    } else {
+      // Manual / Custom
+      setFormData((prev) => ({
+        ...prev,
+        kepada: '',
+        gedung: '',
+        alamat: ''
+      }));
+    }
+  };
+
+  // Handle Perubahan Gedung khusus UT
+  const handleGedungUTChange = (e) => {
+    const gedungVal = e.target.value;
+    setSelectedGedungUT(gedungVal);
+    setFormData((prev) => ({
+      ...prev,
+      gedung: `Gedung ${gedungVal}`
+    }));
+  };
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -45,7 +140,6 @@ export default function SuratJalanApp() {
     setItems(items.filter((_, i) => i !== index));
   };
 
-  // Fungsi Simpan ke Supabase & Cetak
   const handlePrintAndSave = async () => {
     setLoading(true);
     setSaveStatus('Menyimpan ke database...');
@@ -91,29 +185,99 @@ export default function SuratJalanApp() {
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label className="block text-xs font-semibold mb-1">Kepada</label>
-            <input type="text" name="kepada" value={formData.kepada} onChange={handleInputChange} className="w-full border p-2 rounded text-sm" />
+          {/* Dropdown Penerima Utama */}
+          <div className="col-span-1 md:col-span-2 bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+            <label className="block text-xs font-bold text-emerald-800 mb-1">Pilih Penerima / Tujuan</label>
+            <select 
+              value={selectedPenerima} 
+              onChange={handlePenerimaChange}
+              className="w-full border p-2 rounded text-sm bg-white font-medium"
+            >
+              <option value="PT. Beiersdorf Indonesia">PT. Beiersdorf Indonesia</option>
+              <option value="Universitas Terbuka">Universitas Terbuka</option>
+              <option value="CUSTOM">-- + Tambah / Isi Manual Lainnya --</option>
+            </select>
           </div>
+
+          {/* Sub Dropdown Gedung Jika UT Dipilih */}
+          {selectedPenerima === 'Universitas Terbuka' && (
+            <div className="col-span-1 md:col-span-2 bg-blue-50 p-3 rounded-lg border border-blue-200">
+              <label className="block text-xs font-bold text-blue-800 mb-1">Pilih Gedung Universitas Terbuka</label>
+              <select 
+                value={selectedGedungUT} 
+                onChange={handleGedungUTChange}
+                className="w-full border p-2 rounded text-sm bg-white font-medium"
+              >
+                {GEDUNG_UT.map((g, i) => (
+                  <option key={i} value={g}>Gedung {g}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <div>
-            <label className="block text-xs font-semibold mb-1">No. Surat</label>
-            <input type="text" name="noSurat" value={formData.noSurat} onChange={handleInputChange} className="w-full border p-2 rounded text-sm" />
+            <label className="block text-xs font-semibold mb-1">Kepada (PT / Lembaga)</label>
+            <input 
+              type="text" 
+              name="kepada" 
+              value={formData.kepada} 
+              onChange={handleInputChange} 
+              disabled={selectedPenerima !== 'CUSTOM'}
+              className={`w-full border p-2 rounded text-sm ${selectedPenerima !== 'CUSTOM' ? 'bg-gray-100 cursor-not-allowed' : ''}`} 
+            />
           </div>
+
+          <div>
+            <label className="block text-xs font-semibold mb-1">No. Surat (Auto)</label>
+            <div className="flex gap-2">
+              <input type="text" name="noSurat" value={formData.noSurat} onChange={handleInputChange} className="w-full border p-2 rounded text-sm" />
+              <button onClick={() => setFormData({ ...formData, noSurat: generateAutoNoSurat() })} className="bg-gray-200 text-xs px-2 py-1 rounded hover:bg-gray-300">
+                🔄 Auto
+              </button>
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold mb-1">Gedung / Lantai</label>
-            <input type="text" name="gedung" value={formData.gedung} onChange={handleInputChange} className="w-full border p-2 rounded text-sm" />
+            <input 
+              type="text" 
+              name="gedung" 
+              value={formData.gedung} 
+              onChange={handleInputChange} 
+              disabled={selectedPenerima !== 'CUSTOM'}
+              className={`w-full border p-2 rounded text-sm ${selectedPenerima !== 'CUSTOM' ? 'bg-gray-100 cursor-not-allowed' : ''}`} 
+            />
           </div>
+
           <div>
-            <label className="block text-xs font-semibold mb-1">Tanggal</label>
+            <label className="block text-xs font-semibold mb-1">Tanggal (Auto Hari Ini)</label>
             <input type="text" name="tanggal" value={formData.tanggal} onChange={handleInputChange} className="w-full border p-2 rounded text-sm" />
           </div>
+
           <div>
-            <label className="block text-xs font-semibold mb-1">No. Polisi</label>
-            <input type="text" name="noPolisi" value={formData.noPolisi} onChange={handleInputChange} className="w-full border p-2 rounded text-sm" />
+            <label className="block text-xs font-semibold mb-1">No. Polisi Armada</label>
+            <select 
+              name="noPolisi" 
+              value={formData.noPolisi} 
+              onChange={handleInputChange} 
+              className="w-full border p-2 rounded text-sm bg-white"
+            >
+              {PRESET_NOPOL.map((nopol, i) => (
+                <option key={i} value={nopol}>{nopol}</option>
+              ))}
+            </select>
           </div>
+
           <div>
             <label className="block text-xs font-semibold mb-1">Alamat Lengkap</label>
-            <input type="text" name="alamat" value={formData.alamat} onChange={handleInputChange} className="w-full border p-2 rounded text-sm" />
+            <input 
+              type="text" 
+              name="alamat" 
+              value={formData.alamat} 
+              onChange={handleInputChange} 
+              disabled={selectedPenerima !== 'CUSTOM'}
+              className={`w-full border p-2 rounded text-sm ${selectedPenerima !== 'CUSTOM' ? 'bg-gray-100 cursor-not-allowed' : ''}`} 
+            />
           </div>
         </div>
 
@@ -140,7 +304,7 @@ export default function SuratJalanApp() {
         </div>
       </div>
 
-      {/* Tampilan Surat Jalan 2 Salinan (A4 Portrait Fit) */}
+      {/* Tampilan Surat Jalan 2 Salinan */}
       <div className="max-w-[210mm] mx-auto bg-white p-2 space-y-4">
         <SuratJalanCard data={formData} items={items} />
         <div className="border-b-2 border-dashed border-gray-400 my-2 no-print"></div>
@@ -153,7 +317,6 @@ export default function SuratJalanApp() {
 function SuratJalanCard({ data, items }) {
   return (
     <div className="border border-gray-400 p-4 font-sans text-xs relative">
-      {/* Visual Bar Hijau */}
       <div className="h-2 bg-emerald-600 w-full mb-3"></div>
 
       <div className="text-center font-bold text-base uppercase tracking-wider mb-4 border-b pb-1">

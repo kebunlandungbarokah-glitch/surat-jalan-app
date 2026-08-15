@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generator Surat Jalan</title>
+  <!-- Tailwind CSS & Supabase via CDN (Tanpa Build Process) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; padding: 0; }
+      @page { size: A4 portrait; margin: 10mm; }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 p-4 print:p-0 print:bg-white text-gray-800 text-sm">
+
+  <!-- FORM DASHBOARD (HILANG SAAT PRINT) -->
+  <div className="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-md mb-8 no-print border" id="form-container">
+    <div class="flex justify-between items-center mb-4">
+      <h1 class="text-2xl font-bold text-emerald-700">Generator Surat Jalan</h1>
+      <span id="save-status" class="text-xs font-semibold text-blue-600"></span>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <!-- Dropdown Penerima -->
+      <div class="col-span-1 md:col-span-2 bg-emerald-50 p-3 rounded-lg border border-emerald-200">
+        <label class="block text-xs font-bold text-emerald-800 mb-1">Pilih Penerima / Tujuan</label>
+        <select id="select-penerima" onchange="onPenerimaChange()" class="w-full border p-2 rounded text-sm bg-white font-medium">
+          <option value="PT. Beiersdorf Indonesia">PT. Beiersdorf Indonesia</option>
+          <option value="Universitas Terbuka">Universitas Terbuka</option>
+          <option value="CUSTOM">-- + Tambah / Isi Manual Lainnya --</option>
+        </select>
+      </div>
+
+      <!-- Dropdown Gedung UT (Hidden secara default) -->
+      <div id="wrapper-gedung-ut" class="hidden col-span-1 md:col-span-2 bg-blue-50 p-3 rounded-lg border border-blue-200">
+        <label class="block text-xs font-bold text-blue-800 mb-1">Pilih Gedung Universitas Terbuka</label>
+        <select id="select-gedung-ut" onchange="onGedungUTChange()" class="w-full border p-2 rounded text-sm bg-white font-medium">
+          <option value="Perbankan">Gedung Perbankan</option>
+          <option value="Poliklinik">Gedung Poliklinik</option>
+          <option value="LPPMP Lobby">Gedung LPPMP Lobby</option>
+          <option value="PAU">Gedung PAU</option>
+          <option value="Serbaguna">Gedung Serbaguna</option>
+          <option value="Kualitas">Gedung Kualitas</option>
+          <option value="Pascasarjana">Gedung Pascasarjana</option>
+          <option value="Wisma 2 & 3">Gedung Wisma 2 & 3</option>
+          <option value="Rektorat">Gedung Rektorat</option>
+          <option value="LPPMP">Gedung LPPMP</option>
+          <option value="Biro">Gedung Biro</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1">Kepada (PT / Lembaga)</label>
+        <input type="text" id="input-kepada" oninput="renderSurat()" class="w-full border p-2 rounded text-sm bg-gray-100" readonly>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1">No. Surat (Auto)</label>
+        <div class="flex gap-2">
+          <input type="text" id="input-nosurat" oninput="renderSurat()" class="w-full border p-2 rounded text-sm">
+          <button onclick="generateAutoNoSurat()" class="bg-gray-200 text-xs px-2 py-1 rounded hover:bg-gray-300">🔄 Auto</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1">Gedung / Lantai</label>
+        <input type="text" id="input-gedung" oninput="renderSurat()" class="w-full border p-2 rounded text-sm bg-gray-100" readonly>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1">Tanggal (Auto Hari Ini)</label>
+        <input type="text" id="input-tanggal" oninput="renderSurat()" class="w-full border p-2 rounded text-sm">
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1">No. Polisi Armada</label>
+        <select id="input-nopol" onchange="renderSurat()" class="w-full border p-2 rounded text-sm bg-white">
+          <option value="F 8575 HY">F 8575 HY</option>
+          <option value="B 9123 SJA">B 9123 SJA</option>
+          <option value="B 9456 KLB">B 9456 KLB</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-xs font-semibold mb-1">Alamat Lengkap</label>
+        <input type="text" id="input-alamat" oninput="renderSurat()" class="w-full border p-2 rounded text-sm bg-gray-100" readonly>
+      </div>
+    </div>
+
+    <h2 class="font-semibold text-md mb-2">Daftar Barang</h2>
+    <div id="items-container"></div>
+    <button onclick="addItem()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs mt-2">+ Tambah Barang</button>
+
+    <div class="mt-6 border-t pt-4 flex justify-end">
+      <button onclick="saveAndPrint()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-6 rounded shadow">
+        🖨️ Simpan & Cetak PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- TAMPILAN SURAT JALAN (2 SALINAN) -->
+  <div class="max-w-[210mm] mx-auto bg-white p-2 space-y-4">
+    <div id="surat-copy-1"></div>
+    <div class="border-b-2 border-dashed border-gray-400 my-2 no-print"></div>
+    <div id="surat-copy-2"></div>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // Inisialisasi Supabase
+    const SUPABASE_URL = "https://gdultxxabcjtnaxprvat.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_LGTFrw06VV9He2Wddj9OaA_LxpTBsic";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Data Items Default
+    let items = [
+      { nama: 'Tanaman Planter Box', qty: '126 Pot', ket: 'Tanaman Indoor' },
+      { nama: 'Tanaman Lantai', qty: '12 Pot', ket: 'Tanaman Indoor' },
+      { nama: 'Tanaman Pot Meja', qty: '7 Pot', ket: 'Tanaman Indoor' },
+      { nama: 'Tanaman Anggrek', qty: '7 Pot', ket: 'Tanaman Indoor' }
+    ];
+
+    // Format tanggal awal
+    document.getElementById('input-tanggal').value = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    
+    function generateAutoNoSurat() {
+      const romans = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+      const today = new Date();
+      const rand = Math.floor(Math.random() * 900) + 100;
+      document.getElementById('input-nosurat').value = `${rand}/SJ/KLB/${romans[today.getMonth()]}/${today.getFullYear()}`;
+      renderSurat();
+    }
+
+    function onPenerimaChange() {
+      const val = document.getElementById('select-penerima').value;
+      const wrapperUT = document.getElementById('wrapper-gedung-ut');
+      const inKepada = document.getElementById('input-kepada');
+      const inGedung = document.getElementById('input-gedung');
+      const inAlamat = document.getElementById('input-alamat');
+
+      if (val === 'PT. Beiersdorf Indonesia') {
+        wrapperUT.classList.add('hidden');
+        inKepada.value = 'PT. Beiersdorf Indonesia';
+        inGedung.value = 'Tower C, Lt. 6';
+        inAlamat.value = 'South Quarter (SQ) Tower C, Lantai 6, Jl. R.A. Kartini, Kav. 8, Cilandak Barat, Jakarta Selatan';
+        setReadOnly(true);
+      } else if (val === 'Universitas Terbuka') {
+        wrapperUT.classList.remove('hidden');
+        inKepada.value = 'Universitas Terbuka';
+        inAlamat.value = 'Jl. Cabe Raya, Pondok Cabe, Pamulang, Tangerang Selatan';
+        onGedungUTChange();
+        setReadOnly(true);
+      } else {
+        wrapperUT.classList.add('hidden');
+        inKepada.value = '';
+        inGedung.value = '';
+        inAlamat.value = '';
+        setReadOnly(false);
+      }
+      renderSurat();
+    }
+
+    function onGedungUTChange() {
+      const valGedung = document.getElementById('select-gedung-ut').value;
+      document.getElementById('input-gedung').value = 'Gedung ' + valGedung;
+      renderSurat();
+    }
+
+    function setReadOnly(isReadOnly) {
+      ['input-kepada', 'input-gedung', 'input-alamat'].forEach(id => {
+        const el = document.getElementById(id);
+        el.readOnly = isReadOnly;
+        if(isReadOnly) el.classList.add('bg-gray-100'); else el.classList.remove('bg-gray-100');
+      });
+    }
+
+    function renderItemsInput() {
+      const container = document.getElementById('items-container');
+      container.innerHTML = '';
+      items.forEach((item, index) => {
+        container.innerHTML += `
+          <div class="flex gap-2 mb-2 items-center">
+            <span class="w-6 text-center">${index + 1}.</span>
+            <input type="text" value="${item.nama}" oninput="items[${index}].nama = this.value; renderSurat();" placeholder="Nama Barang" class="flex-1 border p-1.5 rounded text-sm">
+            <input type="text" value="${item.qty}" oninput="items[${index}].qty = this.value; renderSurat();" placeholder="Qty" class="w-24 border p-1.5 rounded text-sm">
+            <input type="text" value="${item.ket}" oninput="items[${index}].ket = this.value; renderSurat();" placeholder="Keterangan" class="w-48 border p-1.5 rounded text-sm">
+            <button onclick="removeItem(${index})" class="bg-red-500 text-white px-2 py-1.5 rounded text-xs hover:bg-red-600">Hapus</button>
+          </div>
+        `;
+      });
+    }
+
+    function addItem() {
+      items.push({ nama: '', qty: '', ket: '' });
+      renderItemsInput();
+      renderSurat();
+    }
+
+    function removeItem(idx) {
+      items.splice(idx, 1);
+      renderItemsInput();
+      renderSurat();
+    }
+
+    function getSuratHTML() {
+      const kepada = document.getElementById('input-kepada').value;
+      const noSurat = document.getElementById('input-nosurat').value;
+      const gedung = document.getElementById('input-gedung').value;
+      const tanggal = document.getElementById('input-tanggal').value;
+      const noPolisi = document.getElementById('input-nopol').value;
+      const alamat = document.getElementById('input-alamat').value;
+
+      let rows = items.map((it, i) => `
+        <tr class="border-b border-gray-300">
+          <td class="border border-gray-400 p-1 text-center">${i + 1}</td>
+          <td class="border border-gray-400 p-1">${it.nama}</td>
+          <td class="border border-gray-400 p-1">${it.qty}</td>
+          <td class="border border-gray-400 p-1">${it.ket}</td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="border border-gray-400 p-4 font-sans text-xs relative">
+          <div class="h-2 bg-emerald-600 w-full mb-3"></div>
+          <div class="text-center font-bold text-base uppercase tracking-wider mb-4 border-b pb-1">Surat Jalan</div>
+          <div class="grid grid-cols-2 gap-x-4 gap-y-1 mb-4">
+            <div>
+              <div class="flex"><span class="w-16 font-semibold">Kepada</span>: ${kepada}</div>
+              <div class="flex"><span class="w-16 font-semibold">Alamat</span>: ${alamat}</div>
+              <div class="flex"><span class="w-16 font-semibold">Gedung</span>: ${gedung}</div>
+            </div>
+            <div>
+              <div class="flex"><span class="w-20 font-semibold">Tanggal</span>: ${tanggal}</div>
+              <div class="flex"><span class="w-20 font-semibold">No. Surat</span>: ${noSurat}</div>
+              <div class="flex"><span class="w-20 font-semibold">No. Polisi</span>: ${noPolisi}</div>
+            </div>
+          </div>
+          <table class="w-full border-collapse border border-gray-400 mb-6 text-left">
+            <thead>
+              <tr class="bg-gray-100 border-b border-gray-400">
+                <th class="border border-gray-400 p-1 w-8 text-center">No</th>
+                <th class="border border-gray-400 p-1">Nama Barang</th>
+                <th class="border border-gray-400 p-1 w-24">Qty</th>
+                <th class="border border-gray-400 p-1">Keterangan</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="flex justify-between text-center mt-6 px-12">
+            <div><div>Pengirim</div><div class="mt-10">(..............................)</div></div>
+            <div><div>Penerima</div><div class="mt-10">(..............................)</div></div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSurat() {
+      const html = getSuratHTML();
+      document.getElementById('surat-copy-1').innerHTML = html;
+      document.getElementById('surat-copy-2').innerHTML = html;
+    }
+
+    async function saveAndPrint() {
+      const statusEl = document.getElementById('save-status');
+      statusEl.innerText = "Menyimpan ke DB...";
+      try {
+        await supabase.from('surat_jalan').insert([{
+          no_surat: document.getElementById('input-nosurat').value,
+          kepada: document.getElementById('input-kepada').value,
+          data: {
+            kepada: document.getElementById('input-kepada').value,
+            gedung: document.getElementById('input-gedung').value,
+            alamat: document.getElementById('input-alamat').value,
+            noSurat: document.getElementById('input-nosurat').value,
+            tanggal: document.getElementById('input-tanggal').value,
+            noPolisi: document.getElementById('input-nopol').value,
+            items: items
+          }
+        }]);
+        statusEl.innerText = "✅ Tersimpan!";
+      } catch (err) {
+        statusEl.innerText = "⚠️ Simpan Gagal (Tetap Cetak)";
+      }
+      setTimeout(() => statusEl.innerText = "", 3000);
+      window.print();
+    }
+
+    // Init awal
+    generateAutoNoSurat();
+    onPenerimaChange();
+    renderItemsInput();
+  </script>
+</body>
+</html>
